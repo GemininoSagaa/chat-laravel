@@ -23,23 +23,23 @@
     {#if isLoading}
         <div class="loading">Cargando...</div>
     {:else}
-        {#if $user}
-            <slot />
+        {#if globalThis.$currentRoute === '/login'}
+            <Login />
+        {:else if globalThis.$currentRoute === '/register'}
+            <Register />
+        {:else if globalThis.$currentRoute === '/chat'}
+            <Chat />
         {:else}
-            <div class="auth-container">
-                <div class="auth-card">
-                    <h1>Chat App</h1>
-                    <div class="auth-tabs">
-                        <button on:click={() => navigate('/login')}>Iniciar Sesión</button>
-                        <button on:click={() => navigate('/register')}>Registrarse</button>
-                    </div>
-                </div>
+            <div class="not-found">
+                <h1>404</h1>
+                <p>Página no encontrada</p>
             </div>
         {/if}
     {/if}
 </main>
 
 <style>
+
     main {
         width: 100%;
         height: 100vh;
@@ -49,47 +49,26 @@
     }
     
     .loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
         font-size: 1.2rem;
         color: #555;
     }
     
-    .auth-container {
-        width: 100%;
-        max-width: 400px;
-        padding: 20px;
-    }
-    
-    .auth-card {
-        background: white;
-        padding: 2rem;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .auth-card h1 {
-        text-align: center;
-        margin-bottom: 1.5rem;
-        color: #333;
-    }
-    
-    .auth-tabs {
+    .not-found {
         display: flex;
-        gap: 1rem;
-        margin-top: 1rem;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: #555;
     }
     
-    .auth-tabs button {
-        flex: 1;
-        padding: 8px 0;
-        background: #3490dc;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background 0.3s;
+    .not-found h1 {
+        font-size: 6rem;
+        margin: 0;
     }
-    
-    .auth-tabs button:hover {
-        background: #2779bd;
-    }
+
 </style>

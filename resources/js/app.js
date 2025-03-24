@@ -2,7 +2,9 @@ import './bootstrap';
 import '../css/app.css';
 import App from './App.svelte';
 
-const app = App({
+console.log(typeof App); // Debería mostrar "function"
+
+const app = new App({  // Quita el ".default" aquí
   target: document.getElementById('app')
 });
 

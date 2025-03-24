@@ -1,23 +1,14 @@
 <script>
     import { onMount } from 'svelte';
     import { writable } from 'svelte/store';
-    import { navigate } from './lib/router.js';
-    import { currentRoute } from './lib/router.js';
+    import { navigate, currentRoute } from './lib/router.js';
     import Login from './pages/Login.svelte';
     import Register from './pages/Register.svelte';
-    //import Chat from './pages/Chat.svelte';
-
-    let route = '';
-
-    onMount(() => {
-        currentRoute.subscribe(value => {
-            route = value;
-        });
-    });
+    import Chat from './pages/Chat.svelte';
 
     // Estado de autenticación
     const user = writable(null);
-    const isLoading = writable(true); // Cambiado a writable
+    const isLoading = writable(true);
 
     onMount(async () => {
         try {
@@ -37,12 +28,12 @@
     {#if $isLoading}
         <div class="loading">Cargando...</div>
     {:else}
-        {#if route === '/login'}
+        {#if $currentRoute === '/login'}
             <Login />
-        {:else if $route === '/register'}
+        {:else if $currentRoute === '/register'}
             <Register />
-        {:else if route === '/chat'}
-            <!--<Chat />-->
+        {:else if $currentRoute === '/chat'}
+            <Chat />
         {:else}
             <div class="not-found">
                 <h1>404</h1>

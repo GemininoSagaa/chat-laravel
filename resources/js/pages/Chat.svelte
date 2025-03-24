@@ -285,8 +285,10 @@
             </div>
             <ul class="contact-list">
                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
                 {#each contacts as contact}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <li 
                         class="contact-item"
                         class:active={selectedChat && !selectedChat.isGroup && selectedChat.id === contact.id}
@@ -314,8 +316,10 @@
             </div>
             <ul class="group-list">
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
                 {#each groups as group}
                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
                     <li 
                         class="group-item"
                         class:active={selectedChat && selectedChat.isGroup && selectedChat.id === group.id}
@@ -398,6 +402,7 @@
                     
                     <div class="form-group">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
+                        <!-- svelte-ignore a11y-label-has-associated-control -->
                         <label class="form-label">Seleccionar miembros</label>
                         <div class="members-list">
                             {#each contacts as contact}

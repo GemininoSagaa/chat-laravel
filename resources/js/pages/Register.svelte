@@ -27,7 +27,7 @@
         }
         
         try {
-            const response = await window.axios.post('/api/register', {
+            const response = await window.axios.post('/register', {
                 name,
                 email,
                 password,
@@ -117,7 +117,7 @@
         </form>
         
         <div class="auth-footer">
-            <!-- svelte-ignore a11y_invalid_attribute -->
+            <!-- svelte-ignore a11y-invalid-attribute -->
             <p>¿Ya tienes una cuenta? <a href="#" on:click|preventDefault={() => navigate('/login')}>Iniciar sesión</a></p>
         </div>
     </div>

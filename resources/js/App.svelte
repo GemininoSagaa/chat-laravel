@@ -2,10 +2,22 @@
     import { onMount } from 'svelte';
     import { writable } from 'svelte/store';
     import { navigate } from './lib/router.js';
+    import { currentRoute } from './lib/router.js';
+    import Login from './pages/Login.svelte';
+    import Register from './pages/Register.svelte';
+    //import Chat from './pages/Chat.svelte';
+
+    let route = '';
+
+    onMount(() => {
+        currentRoute.subscribe(value => {
+            route = value;
+        });
+    });
 
     // Estado de autenticación
     const user = writable(null);
-    let isLoading = true;
+    const isLoading = writable(true); // Cambiado a writable
 
     onMount(async () => {
         try {
@@ -14,21 +26,23 @@
         } catch (error) {
             user.set(null);
         } finally {
-            isLoading = false;
+            isLoading.set(false);
         }
     });
+
+    console.log("Ruta actual:", $currentRoute);
 </script>
 
 <main>
-    {#if isLoading}
+    {#if $isLoading}
         <div class="loading">Cargando...</div>
     {:else}
-        {#if globalThis.$currentRoute === '/login'}
+        {#if route === '/login'}
             <Login />
-        {:else if globalThis.$currentRoute === '/register'}
+        {:else if $route === '/register'}
             <Register />
-        {:else if globalThis.$currentRoute === '/chat'}
-            <Chat />
+        {:else if route === '/chat'}
+            <!--<Chat />-->
         {:else}
             <div class="not-found">
                 <h1>404</h1>
@@ -37,6 +51,7 @@
         {/if}
     {/if}
 </main>
+
 
 <style>
 

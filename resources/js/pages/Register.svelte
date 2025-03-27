@@ -27,7 +27,7 @@
         }
         
         try {
-            const response = await window.axios.post('/register', {
+            const response = await window.axios.post('/api/register', {
                 name,
                 email,
                 password,

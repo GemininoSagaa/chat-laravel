@@ -2,6 +2,11 @@
     import { onMount, onDestroy } from 'svelte';
     import { user, logout } from '../stores/auth.js';
     import { navigate } from '../lib/router.js';
+    import FriendsList from '../components/FriendsList.svelte';
+    import GroupsList from '../components/GroupsList.svelte';
+    import ChatMessage from '../components/ChatMessage.svelte';
+    import MessageInput from '../components/MessageInput.svelte';
+    import TypingIndicator from '../components/TypingIndicator.svelte';
     
     let contacts = [];
     let groups = [];
@@ -279,6 +284,20 @@
             </div>
         </div>
         
+        <FriendsList 
+            contacts={contacts}
+            selectedChat={selectedChat}
+            onSelectChat={selectChat}
+            onShowAddFriend={() => showAddFriend = true}
+        />
+        
+        <GroupsList 
+            groups={groups}
+            selectedChat={selectedChat}
+            onSelectChat={selectChat}
+            onShowCreateGroup={() => showCreateGroup = true}
+        />
+        
         <div class="section">
             <div class="section-header">
                 <h4>Chats</h4>
@@ -342,18 +361,18 @@
             <div class="chat-header">
                 <h3>{selectedChat.name || selectedChat.email}</h3>
                 <div class="chat-status">
-                    {#if !selectedChat.isGroup && typingUsers[selectedChat.id]}
-                        <span class="typing-indicator">escribiendo...</span>
-                    {/if}
+                    <TypingIndicator 
+                        isTyping={!selectedChat.isGroup && typingUsers[selectedChat.id]}
+                    />
                 </div>
             </div>
             
             <div class="messages">
                 {#each messages as message}
-                    <div class="message-item" class:sent={message.sender_id === $user.id} class:received={message.sender_id !== $user.id}>
-                        <div class="message-content">{message.content}</div>
-                        <div class="message-time">{new Date(message.created_at).toLocaleTimeString()}</div>
-                    </div>
+                    <ChatMessage 
+                        {message}
+                        currentUserId={$user.id}
+                    />
                 {/each}
                 
                 {#if messages.length === 0}
@@ -361,16 +380,11 @@
                 {/if}
             </div>
             
-            <div class="message-input">
-                <input 
-                    type="text" 
-                    placeholder="Escribe un mensaje..." 
-                    bind:value={newMessage} 
-                    on:keyup={handleTyping}
-                    on:keypress={(e) => e.key === 'Enter' && sendMessage()}
-                />
-                <button class="btn-send" on:click={sendMessage}>Enviar</button>
-            </div>
+            <MessageInput 
+                bind:newMessage={newMessage}
+                {sendMessage}
+                {handleTyping}
+            />
         {:else}
             <div class="no-chat-selected">
                 <p>Selecciona un chat para comenzar a conversar</p>
@@ -628,11 +642,6 @@
         background-color: #f9f9f9;
     }
     
-    .typing-indicator {
-        font-size: 0.8rem;
-        color: #666;
-        font-style: italic;
-    }
     
     .messages {
         flex: 1;
@@ -642,29 +651,6 @@
         flex-direction: column;
     }
     
-    .message-item {
-        max-width: 70%;
-        margin-bottom: 10px;
-        padding: 10px;
-        border-radius: 8px;
-    }
-    
-    .message-item.sent {
-        align-self: flex-end;
-        background-color: #dcf8c6;
-    }
-    
-    .message-item.received {
-        align-self: flex-start;
-        background-color: #f1f0f0;
-    }
-    
-    .message-time {
-        font-size: 0.7rem;
-        color: #888;
-        text-align: right;
-        margin-top: 4px;
-    }
     
     .empty-chat {
         align-self: center;
@@ -672,29 +658,6 @@
         margin-top: 50px;
     }
     
-    .message-input {
-        padding: 15px;
-        border-top: 1px solid #ddd;
-        display: flex;
-        background-color: #f9f9f9;
-    }
-    
-    .message-input input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 20px;
-        margin-right: 10px;
-    }
-    
-    .btn-send {
-        padding: 8px 16px;
-        background-color: #3490dc;
-        color: white;
-        border: none;
-        border-radius: 20px;
-        cursor: pointer;
-    }
     
     .no-chat-selected {
         flex: 1;

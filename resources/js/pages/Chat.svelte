@@ -1,35 +1,20 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import { user, logout } from '../stores/auth.js';
     import { navigate } from '../lib/router.js';
-    import FriendsList from '../components/FriendsList.svelte';
-    import GroupsList from '../components/GroupsList.svelte';
-    import ChatMessage from '../components/ChatMessage.svelte';
-    import MessageInput from '../components/MessageInput.svelte';
-    import TypingIndicator from '../components/TypingIndicator.svelte';
+    import { user } from '../stores/auth.js';
     
+    // Variables de estado
+    let isLoading = true;
     let contacts = [];
     let groups = [];
     let selectedChat = null;
     let messages = [];
     let newMessage = '';
-    let typingTimeout;
-    let typingUsers = {};
     
-    // Variables para crear grupo
-    let showCreateGroup = false;
-    let groupName = '';
-    let selectedMembers = [];
-    
-    // Variable para agregar amigo
+    // Variables para modales
     let showAddFriend = false;
-    let friendEmail = '';
-    let addFriendError = '';
-    let addFriendSuccess = '';
-    
-    // Variable para solicitudes de amistad
-    let friendRequests = [];
     let showFriendRequests = false;
+    let showCreateGroup = false;
     
     onMount(async () => {
         if (!$user) {
@@ -37,482 +22,219 @@
             return;
         }
         
-        // Cargar amigos y grupos
-        await loadFriends();
-        await loadGroups();
-        await loadFriendRequests();
-        
-        // Escuchar eventos en tiempo real
-        listenForMessages();
-        listenForTyping();
-    });
-    
-    onDestroy(() => {
-        // Limpiar cualquier timeout
-        if (typingTimeout) {
-            clearTimeout(typingTimeout);
-        }
-        
-        // Desuscribirse de canales si es necesario
-        if (window.Echo) {
-            window.Echo.leaveAllChannels();
+        try {
+            isLoading = true;
+            console.log("Iniciando carga de datos");
+            
+            // Intentar cargar datos básicos
+            await loadInitialData();
+            
+        } catch (error) {
+            console.error('Error en Chat.svelte:', error);
+        } finally {
+            isLoading = false;
         }
     });
     
-    async function loadFriends() {
+    async function loadInitialData() {
         try {
-            const response = await window.axios.get('/api/friends');
-            contacts = response.data.friends;
+            // Cargar contactos
+            const friendsResponse = await window.axios.get('/api/friends');
+            console.log('Respuesta de amigos:', friendsResponse.data);
+            contacts = friendsResponse.data.friends || [];
+            
+            // Cargar grupos
+            const groupsResponse = await window.axios.get('/api/groups');
+            console.log('Respuesta de grupos:', groupsResponse.data);
+            groups = groupsResponse.data.groups || [];
+            
         } catch (error) {
-            console.error('Error al cargar amigos:', error);
+            console.error('Error al cargar datos iniciales:', error);
+            contacts = [];
+            groups = [];
         }
     }
     
-    async function loadGroups() {
-        try {
-            const response = await window.axios.get('/api/groups');
-            groups = response.data.groups;
-        } catch (error) {
-            console.error('Error al cargar grupos:', error);
-        }
+    function openAddFriendModal() {
+        showAddFriend = true;
+        showFriendRequests = false;
+        showCreateGroup = false;
     }
     
-    async function loadFriendRequests() {
-        try {
-            const response = await window.axios.get('/api/friends');
-            friendRequests = response.data.received_requests;
-        } catch (error) {
-            console.error('Error al cargar solicitudes de amistad:', error);
-        }
+    function closeAddFriendModal() {
+        showAddFriend = false;
     }
     
-    function listenForMessages() {
-        if (!window.Echo) return;
-        
-        // Escuchar mensajes directos
-        window.Echo.private(`chat.${$user.id}.${selectedChat?.id}`)
-            .listen('MessageSent', (e) => {
-                messages = [...messages, e.message];
-            });
-            
-        // Si es un grupo, escuchar mensajes del grupo
-        if (selectedChat?.group_id) {
-            window.Echo.private(`group.${selectedChat.group_id}`)
-                .listen('MessageSent', (e) => {
-                    messages = [...messages, e.message];
-                });
-        }
+    function openFriendRequestsModal() {
+        showFriendRequests = true;
+        showAddFriend = false;
+        showCreateGroup = false;
     }
     
-    function listenForTyping() {
-        if (!window.Echo || !selectedChat) return;
-        
-        window.Echo.private(`chat.${$user.id}.${selectedChat.id}`)
-            .listen('UserTyping', (e) => {
-                const userId = e.senderId;
-                
-                // Actualizar estado de escritura
-                typingUsers = { ...typingUsers, [userId]: true };
-                
-                // Limpiar después de 3 segundos
-                setTimeout(() => {
-                    typingUsers = { ...typingUsers, [userId]: false };
-                }, 3000);
-            });
+    function closeFriendRequestsModal() {
+        showFriendRequests = false;
     }
     
-    async function selectChat(chat, isGroup = false) {
-        // Limpiar chat anterior
-        messages = [];
-        selectedChat = { ...chat, isGroup };
-        
-        try {
-            let response;
-            
-            if (isGroup) {
-                response = await window.axios.get(`/api/groups/${chat.id}/messages`);
-            } else {
-                response = await window.axios.get(`/api/messages/${chat.id}`);
-            }
-            
-            messages = response.data.messages;
-            
-            // Reiniciar los listeners
-            if (window.Echo) {
-                window.Echo.leaveAllChannels();
-                listenForMessages();
-                listenForTyping();
-            }
-        } catch (error) {
-            console.error('Error al cargar mensajes:', error);
-        }
+    function openCreateGroupModal() {
+        showCreateGroup = true;
+        showAddFriend = false;
+        showFriendRequests = false;
     }
     
-    function handleTyping() {
-        if (!selectedChat || !$user) return;
-        
-        // Enviar evento de escritura
-        if (typingTimeout) {
-            clearTimeout(typingTimeout);
-        }
-        
-        // Notificar solo una vez cada 2 segundos para no saturar
-        typingTimeout = setTimeout(async () => {
-            try {
-                await window.axios.post(`/api/user/typing/${selectedChat.id}`);
-            } catch (error) {
-                console.error('Error al enviar estado de escritura:', error);
-            }
-        }, 2000);
-    }
-    
-    async function sendMessage() {
-        if (!newMessage.trim() || !selectedChat) return;
-        
-        try {
-            let response;
-            
-            if (selectedChat.isGroup) {
-                response = await window.axios.post(`/api/groups/${selectedChat.id}/messages`, {
-                    content: newMessage
-                });
-            } else {
-                response = await window.axios.post(`/api/messages/${selectedChat.id}`, {
-                    content: newMessage
-                });
-            }
-            
-            // Añadir el mensaje a la lista
-            messages = [...messages, response.data.message];
-            newMessage = '';
-        } catch (error) {
-            console.error('Error al enviar mensaje:', error);
-        }
-    }
-    
-    async function createGroup() {
-        if (!groupName.trim() || selectedMembers.length === 0) return;
-        
-        try {
-            const response = await window.axios.post('/api/groups', {
-                name: groupName,
-                members: selectedMembers
-            });
-            
-            groups = [...groups, response.data.group];
-            groupName = '';
-            selectedMembers = [];
-            showCreateGroup = false;
-        } catch (error) {
-            console.error('Error al crear grupo:', error);
-        }
-    }
-    
-    async function addFriend() {
-        if (!friendEmail.trim()) return;
-        
-        addFriendError = '';
-        addFriendSuccess = '';
-        
-        try {
-            const response = await window.axios.post('/api/friends/request', {
-                email: friendEmail
-            });
-            
-            addFriendSuccess = 'Solicitud de amistad enviada';
-            friendEmail = '';
-            setTimeout(() => {
-                addFriendSuccess = '';
-                showAddFriend = false;
-            }, 2000);
-        } catch (error) {
-            if (error.response && error.response.data && error.response.data.message) {
-                addFriendError = error.response.data.message;
-            } else {
-                addFriendError = 'Error al enviar solicitud de amistad';
-            }
-        }
-    }
-    
-    async function acceptFriendRequest(userId) {
-        try {
-            await window.axios.post(`/api/friends/accept/${userId}`);
-            
-            // Recargar amigos y solicitudes
-            await loadFriends();
-            await loadFriendRequests();
-        } catch (error) {
-            console.error('Error al aceptar solicitud de amistad:', error);
-        }
-    }
-    
-    async function rejectFriendRequest(userId) {
-        try {
-            await window.axios.post(`/api/friends/reject/${userId}`);
-            
-            // Recargar solicitudes
-            await loadFriendRequests();
-        } catch (error) {
-            console.error('Error al rechazar solicitud de amistad:', error);
-        }
+    function closeCreateGroupModal() {
+        showCreateGroup = false;
     }
     
     async function handleLogout() {
-        await logout();
-        navigate('/login');
+        try {
+            await window.axios.post('/api/logout');
+            localStorage.removeItem('token');
+            user.set(null);
+            navigate('/login');
+        } catch (error) {
+            console.error('Error al cerrar sesión:', error);
+        }
     }
 </script>
 
 <div class="chat-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="user-info">
-            <h3>{$user ? $user.name : 'Usuario'}</h3>
-            <div class="user-actions">
-                <button class="btn-icon" on:click={() => showFriendRequests = true}>
-                    <span class="icon">👥</span>
-                    {#if friendRequests.length > 0}
-                        <span class="badge">{friendRequests.length}</span>
-                    {/if}
-                </button>
-                <button class="btn-icon" on:click={() => showAddFriend = true}>
-                    <span class="icon">➕</span>
-                </button>
-                <button class="btn-icon" on:click={handleLogout}>
-                    <span class="icon">🚪</span>
-                </button>
-            </div>
+    {#if isLoading}
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <p>Cargando... Por favor espere</p>
         </div>
-        
-        <FriendsList 
-            contacts={contacts}
-            selectedChat={selectedChat}
-            onSelectChat={selectChat}
-            onShowAddFriend={() => showAddFriend = true}
-        />
-        
-        <GroupsList 
-            groups={groups}
-            selectedChat={selectedChat}
-            onSelectChat={selectChat}
-            onShowCreateGroup={() => showCreateGroup = true}
-        />
-        
-        <div class="section">
-            <div class="section-header">
-                <h4>Chats</h4>
-            </div>
-            <ul class="contact-list">
-                <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                {#each contacts as contact}
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <!-- svelte-ignore a11y-click-events-have-key-events -->
-                    <li 
-                        class="contact-item"
-                        class:active={selectedChat && !selectedChat.isGroup && selectedChat.id === contact.id}
-                        on:click={() => selectChat(contact, false)}
-                    >
-                        <div class="contact-info">
-                            <span class="contact-name">{contact.name}</span>
-                            <span class="contact-status" class:online={contact.status === 'online'}>
-                                {contact.status === 'online' ? '🟢' : '⚪'}
-                            </span>
-                        </div>
-                    </li>
-                {/each}
-                
-                {#if contacts.length === 0}
-                    <li class="empty-list">No tienes amigos aún</li>
-                {/if}
-            </ul>
-        </div>
-        
-        <div class="section">
-            <div class="section-header">
-                <h4>Grupos</h4>
-                <button class="btn-sm" on:click={() => showCreateGroup = true}>Nuevo</button>
-            </div>
-            <ul class="group-list">
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                {#each groups as group}
-                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                    <li 
-                        class="group-item"
-                        class:active={selectedChat && selectedChat.isGroup && selectedChat.id === group.id}
-                        on:click={() => selectChat(group, true)}
-                    >
-                        <span class="group-name">{group.name}</span>
-                    </li>
-                {/each}
-                
-                {#if groups.length === 0}
-                    <li class="empty-list">No tienes grupos aún</li>
-                {/if}
-            </ul>
-        </div>
-    </div>
-    
-    <!-- Chat Area -->
-    <div class="chat-area">
-        {#if selectedChat}
-            <div class="chat-header">
-                <h3>{selectedChat.name || selectedChat.email}</h3>
-                <div class="chat-status">
-                    <TypingIndicator 
-                        isTyping={!selectedChat.isGroup && typingUsers[selectedChat.id]}
-                    />
+    {:else}
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="user-info">
+                <h3>{$user ? $user.name : 'Usuario'}</h3>
+                <div class="action-buttons">
+                    <button class="btn-icon" on:click={openFriendRequestsModal}>
+                        <span class="icon">👥</span>
+                    </button>
+                    <button class="btn-icon" on:click={openAddFriendModal}>
+                        <span class="icon">➕</span>
+                    </button>
+                    <button class="btn-icon" on:click={handleLogout}>
+                        <span class="icon">🚪</span>
+                    </button>
                 </div>
             </div>
             
-            <div class="messages">
-                {#each messages as message}
-                    <ChatMessage 
-                        {message}
-                        currentUserId={$user.id}
-                    />
-                {/each}
-                
-                {#if messages.length === 0}
-                    <div class="empty-chat">No hay mensajes aún</div>
-                {/if}
+            <!-- Lista de contactos -->
+            <div class="section">
+                <div class="section-header">
+                    <h4>Contactos</h4>
+                    <button class="btn-add" on:click={openAddFriendModal}>Añadir</button>
+                </div>
+                <div class="contact-list">
+                    {#if contacts && contacts.length > 0}
+                        {#each contacts as contact}
+                            <div class="contact-item">
+                                <span class="contact-name">{contact.name}</span>
+                                <span class="status-dot" class:online={contact.status === 'online'}></span>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="empty-list">No tienes contactos</div>
+                    {/if}
+                </div>
             </div>
             
-            <MessageInput 
-                bind:newMessage={newMessage}
-                {sendMessage}
-                {handleTyping}
-            />
-        {:else}
-            <div class="no-chat-selected">
+            <!-- Lista de grupos -->
+            <div class="section">
+                <div class="section-header">
+                    <h4>Grupos</h4>
+                    <button class="btn-add" on:click={openCreateGroupModal}>Crear</button>
+                </div>
+                <div class="group-list">
+                    {#if groups && groups.length > 0}
+                        {#each groups as group}
+                            <div class="group-item">
+                                <span class="group-name">{group.name}</span>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="empty-list">No tienes grupos</div>
+                    {/if}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Área de chat -->
+        <div class="chat-area">
+            <div class="empty-chat">
                 <p>Selecciona un chat para comenzar a conversar</p>
             </div>
-        {/if}
-    </div>
-    
-    <!-- Modal para crear grupo -->
-    {#if showCreateGroup}
-        <div class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Crear nuevo grupo</h3>
-                    <button class="btn-close" on:click={() => showCreateGroup = false}>×</button>
-                </div>
-                
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="group-name" class="form-label">Nombre del grupo</label>
-                        <input 
-                            type="text" 
-                            id="group-name" 
-                            class="form-control" 
-                            placeholder="Nombre del grupo" 
-                            bind:value={groupName} 
-                            required
-                        />
+        </div>
+        
+        <!-- Modales -->
+        {#if showAddFriend}
+            <div class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Añadir Amigo</h3>
+                        <button class="close-btn" on:click={closeAddFriendModal}>×</button>
                     </div>
-                    
-                    <div class="form-group">
-                        <!-- svelte-ignore a11y_label_has_associated_control -->
-                        <!-- svelte-ignore a11y-label-has-associated-control -->
-                        <label class="form-label">Seleccionar miembros</label>
+                    <div class="modal-body">
+                        <p>Ingresa el correo electrónico del amigo que deseas añadir</p>
+                        <input type="email" placeholder="correo@ejemplo.com" class="input-field" />
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn">Enviar Solicitud</button>
+                        <button class="btn btn-cancel" on:click={closeAddFriendModal}>Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        {/if}
+        
+        {#if showFriendRequests}
+            <div class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Solicitudes de Amistad</h3>
+                        <button class="close-btn" on:click={closeFriendRequestsModal}>×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="empty-list">No tienes solicitudes pendientes</div>
+                    </div>
+                </div>
+            </div>
+        {/if}
+        
+        {#if showCreateGroup}
+            <div class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Crear Grupo</h3>
+                        <button class="close-btn" on:click={closeCreateGroupModal}>×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Ingresa el nombre del grupo</p>
+                        <input type="text" placeholder="Nombre del grupo" class="input-field" />
+                        <p>Selecciona los miembros</p>
                         <div class="members-list">
-                            {#each contacts as contact}
-                                <div class="member-item">
-                                    <label>
-                                        <input 
-                                            type="checkbox" 
-                                            value={contact.id} 
-                                            bind:group={selectedMembers} 
-                                        />
-                                        {contact.name}
-                                    </label>
-                                </div>
-                            {/each}
+                            {#if contacts && contacts.length > 0}
+                                {#each contacts as contact}
+                                    <div class="member-item">
+                                        <label>
+                                            <input type="checkbox" />
+                                            {contact.name}
+                                        </label>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <div class="empty-list">No tienes amigos para agregar</div>
+                            {/if}
                         </div>
                     </div>
-                </div>
-                
-                <div class="modal-footer">
-                    <button class="btn" on:click={createGroup}>Crear grupo</button>
-                    <button class="btn btn-cancel" on:click={() => showCreateGroup = false}>Cancelar</button>
-                </div>
-            </div>
-        </div>
-    {/if}
-    
-    <!-- Modal para agregar amigo -->
-    {#if showAddFriend}
-        <div class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Agregar amigo</h3>
-                    <button class="btn-close" on:click={() => showAddFriend = false}>×</button>
-                </div>
-                
-                <div class="modal-body">
-                    {#if addFriendError}
-                        <div class="alert alert-danger">{addFriendError}</div>
-                    {/if}
-                    
-                    {#if addFriendSuccess}
-                        <div class="alert alert-success">{addFriendSuccess}</div>
-                    {/if}
-                    
-                    <div class="form-group">
-                        <label for="friend-email" class="form-label">Correo electrónico</label>
-                        <input 
-                            type="email" 
-                            id="friend-email" 
-                            class="form-control" 
-                            placeholder="correo@ejemplo.com" 
-                            bind:value={friendEmail} 
-                            required
-                        />
+                    <div class="modal-footer">
+                        <button class="btn">Crear Grupo</button>
+                        <button class="btn btn-cancel" on:click={closeCreateGroupModal}>Cancelar</button>
                     </div>
                 </div>
-                
-                <div class="modal-footer">
-                    <button class="btn" on:click={addFriend}>Enviar solicitud</button>
-                    <button class="btn btn-cancel" on:click={() => showAddFriend = false}>Cancelar</button>
-                </div>
             </div>
-        </div>
-    {/if}
-    
-    <!-- Modal para solicitudes de amistad -->
-    {#if showFriendRequests}
-        <div class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Solicitudes de amistad</h3>
-                    <button class="btn-close" on:click={() => showFriendRequests = false}>×</button>
-                </div>
-                
-                <div class="modal-body">
-                    {#if friendRequests.length > 0}
-                        <ul class="requests-list">
-                            {#each friendRequests as request}
-                                <li class="request-item">
-                                    <div class="request-info">
-                                        <span class="request-name">{request.user.name}</span>
-                                        <span class="request-email">{request.user.email}</span>
-                                    </div>
-                                    <div class="request-actions">
-                                        <button class="btn-sm btn-accept" on:click={() => acceptFriendRequest(request.user.id)}>Aceptar</button>
-                                        <button class="btn-sm btn-reject" on:click={() => rejectFriendRequest(request.user.id)}>Rechazar</button>
-                                    </div>
-                                </li>
-                            {/each}
-                        </ul>
-                    {:else}
-                        <p class="empty-list">No tienes solicitudes de amistad pendientes</p>
-                    {/if}
-                </div>
-            </div>
-        </div>
+        {/if}
     {/if}
 </div>
 
@@ -520,12 +242,36 @@
     .chat-container {
         display: flex;
         height: 100vh;
-        overflow: hidden;
+        width: 100%;
     }
     
-    /* Sidebar styles */
+    .loading-screen {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3490dc;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
     .sidebar {
-        width: 280px;
+        width: 300px;
         background-color: #f5f5f5;
         border-right: 1px solid #ddd;
         display: flex;
@@ -535,15 +281,16 @@
     
     .user-info {
         padding: 15px;
-        border-bottom: 1px solid #ddd;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        background-color: #e9ecef;
+        border-bottom: 1px solid #ddd;
     }
     
-    .user-actions {
+    .action-buttons {
         display: flex;
-        gap: 5px;
+        gap: 10px;
     }
     
     .btn-icon {
@@ -551,22 +298,13 @@
         border: none;
         cursor: pointer;
         font-size: 1.2rem;
-        position: relative;
+        padding: 5px;
+        border-radius: 50%;
+        transition: background-color 0.2s;
     }
     
-    .badge {
-        position: absolute;
-        top: -5px;
-        right: -5px;
-        background-color: #e74c3c;
-        color: white;
-        border-radius: 50%;
-        width: 16px;
-        height: 16px;
-        font-size: 0.7rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    .btn-icon:hover {
+        background-color: #ddd;
     }
     
     .section {
@@ -578,9 +316,10 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        background-color: #f1f3f5;
     }
     
-    .btn-sm {
+    .btn-add {
         padding: 3px 8px;
         background-color: #3490dc;
         color: white;
@@ -591,83 +330,54 @@
     }
     
     .contact-list, .group-list {
-        list-style: none;
         padding: 0;
-        margin: 0;
     }
     
     .contact-item, .group-item {
         padding: 10px 15px;
         border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         cursor: pointer;
+        transition: background-color 0.2s;
     }
     
     .contact-item:hover, .group-item:hover {
-        background-color: #e8e8e8;
+        background-color: #e9ecef;
     }
     
-    .contact-item.active, .group-item.active {
-        background-color: #e3f2fd;
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #adb5bd;
     }
     
-    .contact-info {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .contact-status.online {
-        color: #2ecc71;
+    .status-dot.online {
+        background-color: #2ecc71;
     }
     
     .empty-list {
-        padding: 10px 15px;
-        color: #999;
+        padding: 15px;
+        color: #6c757d;
+        text-align: center;
         font-style: italic;
     }
     
-    /* Chat area styles */
     .chat-area {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .chat-header {
-        padding: 15px;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: #f9f9f9;
-    }
-    
-    
-    .messages {
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    
-    .empty-chat {
-        align-self: center;
-        color: #999;
-        margin-top: 50px;
-    }
-    
-    
-    .no-chat-selected {
         flex: 1;
         display: flex;
         justify-content: center;
         align-items: center;
-        color: #999;
+        background-color: #fff;
     }
     
-    /* Modal styles */
+    .empty-chat {
+        color: #6c757d;
+        text-align: center;
+    }
+    
     .modal {
         position: fixed;
         top: 0;
@@ -684,9 +394,12 @@
     .modal-content {
         background-color: white;
         border-radius: 8px;
-        width: 100%;
+        width: 90%;
         max-width: 500px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
     
     .modal-header {
@@ -697,7 +410,7 @@
         align-items: center;
     }
     
-    .btn-close {
+    .close-btn {
         background: none;
         border: none;
         font-size: 1.5rem;
@@ -706,6 +419,40 @@
     
     .modal-body {
         padding: 15px;
+        overflow-y: auto;
+        flex: 1;
+    }
+    
+    .input-field {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    
+    .members-list {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 10px;
+    }
+    
+    .member-item {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .member-item:last-child {
+        border-bottom: none;
+    }
+    
+    .member-item label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
     }
     
     .modal-footer {
@@ -716,55 +463,16 @@
         gap: 10px;
     }
     
-    .btn-cancel {
-        background-color: #e74c3c;
-    }
-    
-    .members-list {
-        max-height: 200px;
-        overflow-y: auto;
-        border: 1px solid #ddd;
+    .btn {
+        padding: 8px 16px;
+        background-color: #3490dc;
+        color: white;
+        border: none;
         border-radius: 4px;
-        padding: 10px;
+        cursor: pointer;
     }
     
-    .member-item {
-        margin-bottom: 5px;
-    }
-    
-    .requests-list {
-        list-style: none;
-        padding: 0;
-    }
-    
-    .request-item {
-        padding: 10px;
-        border-bottom: 1px solid #eee;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .request-info {
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .request-email {
-        font-size: 0.8rem;
-        color: #999;
-    }
-    
-    .request-actions {
-        display: flex;
-        gap: 5px;
-    }
-    
-    .btn-accept {
-        background-color: #2ecc71;
-    }
-    
-    .btn-reject {
-        background-color: #e74c3c;
+    .btn-cancel {
+        background-color: #6c757d;
     }
 </style>

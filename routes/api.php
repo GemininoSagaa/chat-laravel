@@ -29,6 +29,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/messages/{user}', [MessageController::class, 'getUserMessages']);
     Route::post('/messages/{user}', [MessageController::class, 'sendMessage']);
     
+    // Typing indicator
+    Route::post('/user/typing/{receiverId}', [MessageController::class, 'userTyping']);
+    
     // Grupos
     Route::get('/groups', [GroupController::class, 'index']);
     Route::post('/groups', [GroupController::class, 'store']);

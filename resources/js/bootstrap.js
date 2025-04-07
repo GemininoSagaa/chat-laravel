@@ -1,10 +1,11 @@
 import axios from 'axios';
-window.axios = axios;
-window.axios.defaults.baseURL = 'http://localhost:8000'; // O http://127.0.0.1:8000
-window.axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').content;
+import api from './lib/api';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
+window.axios = api;
+
+// Configuración de Pusher para Laravel Echo
 window.Pusher = Pusher;
 
 window.Echo = new Echo({
@@ -16,4 +17,10 @@ window.Echo = new Echo({
     wssPort: import.meta.env.VITE_PUSHER_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_PUSHER_SCHEME ?? 'https') === 'https',
     enabledTransports: ['ws', 'wss'],
+    auth: {
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+    }
 });

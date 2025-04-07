@@ -113,6 +113,7 @@
         </form>
         
         <div class="auth-footer">
+            <!-- svelte-ignore a11y-invalid-attribute -->
             <p>¿No tienes una cuenta? <a href="#" on:click|preventDefault={() => navigate('/register')}>Regístrate</a></p>
         </div>
     </div>

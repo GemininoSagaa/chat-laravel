@@ -11,88 +11,360 @@
     let messages = [];
     let newMessage = '';
     
+    // Variables para las solicitudes de amistad
+    let friendRequests = {
+        sent: [],
+        received: []
+    };
+    
     // Variables para modales
     let showAddFriend = false;
     let showFriendRequests = false;
     let showCreateGroup = false;
     
+    // Variables para el modal de añadir amigos
+    let friendEmail = '';
+    let addFriendError = '';
+    let addFriendSuccess = '';
+    let isSubmitting = false;
+    
+    // Variables para el modal de crear grupo
+    let groupName = '';
+    let selectedMembers = {};
+    let createGroupError = '';
+    
+    // Configurar Echo para escuchar eventos en tiempo real
+    let echoSetup = false;
+    
     onMount(async () => {
+        console.log('[CHAT] Componente montado');
+        
         if (!$user) {
+            console.log('[CHAT] Usuario no autenticado, redirigiendo a login');
             navigate('/login');
             return;
         }
         
         try {
             isLoading = true;
-            console.log("Iniciando carga de datos");
+            console.log("[CHAT] Iniciando carga de datos del usuario:", $user.id);
             
             // Intentar cargar datos básicos
             await loadInitialData();
             
+            // Configurar Echo solo una vez
+            if (!echoSetup) {
+                setupEchoChannels();
+                echoSetup = true;
+            }
+            
         } catch (error) {
-            console.error('Error en Chat.svelte:', error);
+            console.error('[CHAT] Error al inicializar chat:', error);
         } finally {
             isLoading = false;
         }
     });
     
+    onDestroy(() => {
+        console.log('[CHAT] Componente desmontado, limpiando listeners');
+        // Limpiar listeners de Echo si es necesario
+        if (echoSetup && window.Echo) {
+            // Ejemplo: window.Echo.leave('chat.channel');
+        }
+    });
+    
     async function loadInitialData() {
+        console.log('[CHAT] Cargando datos iniciales');
+        
         try {
-            // Cargar contactos
+            // Cargar contactos y solicitudes de amistad
             const friendsResponse = await window.axios.get('/api/friends');
-            console.log('Respuesta de amigos:', friendsResponse.data);
+            console.log('[CHAT] Respuesta de amigos:', friendsResponse.data);
+            
             contacts = friendsResponse.data.friends || [];
+            friendRequests.sent = friendsResponse.data.sent_requests || [];
+            friendRequests.received = friendsResponse.data.received_requests || [];
+            
+            console.log('[CHAT] Amigos cargados:', contacts.length);
+            console.log('[CHAT] Solicitudes enviadas:', friendRequests.sent.length);
+            console.log('[CHAT] Solicitudes recibidas:', friendRequests.received.length);
             
             // Cargar grupos
             const groupsResponse = await window.axios.get('/api/groups');
-            console.log('Respuesta de grupos:', groupsResponse.data);
+            console.log('[CHAT] Respuesta de grupos:', groupsResponse.data);
             groups = groupsResponse.data.groups || [];
+            console.log('[CHAT] Grupos cargados:', groups.length);
             
         } catch (error) {
-            console.error('Error al cargar datos iniciales:', error);
+            console.error('[CHAT] Error al cargar datos iniciales:', error);
             contacts = [];
             groups = [];
+            friendRequests = { sent: [], received: [] };
         }
     }
     
+    function setupEchoChannels() {
+        console.log('[ECHO] Configurando canales de tiempo real');
+        
+        if (!window.Echo) {
+            console.error('[ECHO] Echo no está disponible');
+            return;
+        }
+        
+        try {
+            // Escuchar mensajes privados
+            const privateChannel = `chat.${$user.id}`;
+            console.log(`[ECHO] Suscribiéndose al canal privado: ${privateChannel}`);
+            
+            window.Echo.private(privateChannel)
+                .listen('MessageSent', (event) => {
+                    console.log('[ECHO] Nuevo mensaje recibido:', event);
+                    handleNewMessage(event.message);
+                })
+                .listen('UserTyping', (event) => {
+                    console.log('[ECHO] Usuario escribiendo:', event);
+                    // Manejar indicador de escritura
+                });
+                
+            console.log('[ECHO] Canales configurados correctamente');
+        } catch (error) {
+            console.error('[ECHO] Error al configurar canales de Echo:', error);
+        }
+    }
+    
+    function handleNewMessage(message) {
+        console.log('[CHAT] Manejando nuevo mensaje:', message);
+        // Implementar lógica para añadir mensaje al chat activo
+    }
+    
+    // Funciones para modales
     function openAddFriendModal() {
+        console.log('[MODAL] Abriendo modal para añadir amigo');
         showAddFriend = true;
         showFriendRequests = false;
         showCreateGroup = false;
+        
+        // Resetear estado del formulario
+        friendEmail = '';
+        addFriendError = '';
+        addFriendSuccess = '';
     }
     
     function closeAddFriendModal() {
+        console.log('[MODAL] Cerrando modal para añadir amigo');
         showAddFriend = false;
     }
     
     function openFriendRequestsModal() {
+        console.log('[MODAL] Abriendo modal de solicitudes de amistad');
         showFriendRequests = true;
         showAddFriend = false;
         showCreateGroup = false;
     }
     
     function closeFriendRequestsModal() {
+        console.log('[MODAL] Cerrando modal de solicitudes de amistad');
         showFriendRequests = false;
     }
     
     function openCreateGroupModal() {
+        console.log('[MODAL] Abriendo modal para crear grupo');
         showCreateGroup = true;
         showAddFriend = false;
         showFriendRequests = false;
+        
+        // Resetear formulario
+        groupName = '';
+        selectedMembers = {};
+        createGroupError = '';
     }
     
     function closeCreateGroupModal() {
+        console.log('[MODAL] Cerrando modal para crear grupo');
         showCreateGroup = false;
     }
     
+    // Funciones de amistad
+    async function sendFriendRequest() {
+        console.log('[FRIEND] Enviando solicitud de amistad a:', friendEmail);
+        
+        // Resetear mensajes
+        addFriendError = '';
+        addFriendSuccess = '';
+        isSubmitting = true;
+        
+        try {
+            const response = await window.axios.post('/api/friends/request', {
+                email: friendEmail
+            });
+            
+            console.log('[FRIEND] Respuesta de solicitud de amistad:', response.data);
+            
+            // Mostrar mensaje de éxito
+            addFriendSuccess = 'Solicitud enviada correctamente';
+            
+            // Limpiar el campo de correo
+            friendEmail = '';
+            
+            // Recargar datos de amistades después de un breve tiempo
+            setTimeout(async () => {
+                await loadInitialData();
+                closeAddFriendModal();
+            }, 2000);
+            
+        } catch (error) {
+            console.error('[FRIEND] Error al enviar solicitud de amistad:', error);
+            
+            if (error.response && error.response.data && error.response.data.message) {
+                addFriendError = error.response.data.message;
+            } else {
+                addFriendError = 'Error al enviar la solicitud. Intenta nuevamente.';
+            }
+        } finally {
+            isSubmitting = false;
+        }
+    }
+    
+    async function acceptFriendRequest(userId) {
+        console.log('[FRIEND] Aceptando solicitud de amistad de usuario ID:', userId);
+        
+        try {
+            const response = await window.axios.post(`/api/friends/accept/${userId}`);
+            console.log('[FRIEND] Respuesta al aceptar solicitud:', response.data);
+            
+            // Recargar datos
+            await loadInitialData();
+            
+        } catch (error) {
+            console.error('[FRIEND] Error al aceptar solicitud de amistad:', error);
+        }
+    }
+    
+    async function rejectFriendRequest(userId) {
+        console.log('[FRIEND] Rechazando solicitud de amistad de usuario ID:', userId);
+        
+        try {
+            const response = await window.axios.post(`/api/friends/reject/${userId}`);
+            console.log('[FRIEND] Respuesta al rechazar solicitud:', response.data);
+            
+            // Recargar datos
+            await loadInitialData();
+            
+        } catch (error) {
+            console.error('[FRIEND] Error al rechazar solicitud de amistad:', error);
+        }
+    }
+    
+    // Funciones de grupo
+    async function createGroup() {
+        console.log('[GROUP] Creando grupo:', groupName);
+        
+        try {
+            // Convertir objeto de miembros seleccionados a array de IDs
+            const members = Object.keys(selectedMembers).filter(id => selectedMembers[id]);
+            console.log('[GROUP] Miembros seleccionados:', members);
+            
+            if (members.length === 0) {
+                createGroupError = 'Debes seleccionar al menos un miembro para el grupo';
+                return;
+            }
+            
+            const response = await window.axios.post('/api/groups', {
+                name: groupName,
+                members: members
+            });
+            
+            console.log('[GROUP] Grupo creado:', response.data);
+            
+            // Recargar datos y cerrar modal
+            await loadInitialData();
+            closeCreateGroupModal();
+            
+        } catch (error) {
+            console.error('[GROUP] Error al crear grupo:', error);
+            
+            if (error.response && error.response.data && error.response.data.message) {
+                createGroupError = error.response.data.message;
+            } else {
+                createGroupError = 'Error al crear el grupo. Intenta nuevamente.';
+            }
+        }
+    }
+    
+    // Funciones de chat
+    function selectChat(chat, isGroup) {
+        console.log('[CHAT] Seleccionando chat:', chat, 'Es grupo:', isGroup);
+        selectedChat = { ...chat, isGroup };
+        loadChatMessages(chat.id, isGroup);
+    }
+    
+    async function loadChatMessages(chatId, isGroup) {
+        console.log('[CHAT] Cargando mensajes para', isGroup ? 'grupo' : 'usuario', 'ID:', chatId);
+        
+        try {
+            const endpoint = isGroup 
+                ? `/api/groups/${chatId}/messages`
+                : `/api/messages/${chatId}`;
+                
+            const response = await window.axios.get(endpoint);
+            console.log('[CHAT] Mensajes cargados:', response.data);
+            
+            messages = response.data.messages || [];
+            
+        } catch (error) {
+            console.error('[CHAT] Error al cargar mensajes:', error);
+            messages = [];
+        }
+    }
+    
+    async function sendMessage() {
+        if (!newMessage.trim() || !selectedChat) return;
+        
+        console.log('[CHAT] Enviando mensaje a', selectedChat.isGroup ? 'grupo' : 'usuario', 'ID:', selectedChat.id);
+        
+        try {
+            const endpoint = selectedChat.isGroup
+                ? `/api/groups/${selectedChat.id}/messages`
+                : `/api/messages/${selectedChat.id}`;
+                
+            const response = await window.axios.post(endpoint, {
+                content: newMessage
+            });
+            
+            console.log('[CHAT] Mensaje enviado:', response.data);
+            
+            // Añadir mensaje a la lista local
+            if (response.data.message) {
+                messages = [...messages, response.data.message];
+            }
+            
+            // Limpiar campo de mensaje
+            newMessage = '';
+            
+        } catch (error) {
+            console.error('[CHAT] Error al enviar mensaje:', error);
+        }
+    }
+    
+    // Función de cierre de sesión
     async function handleLogout() {
+        console.log('[AUTH] Iniciando cierre de sesión');
+        
         try {
             await window.axios.post('/api/logout');
+            console.log('[AUTH] Sesión cerrada en el servidor');
+            
             localStorage.removeItem('token');
             user.set(null);
             navigate('/login');
+            
         } catch (error) {
-            console.error('Error al cerrar sesión:', error);
+            console.error('[AUTH] Error al cerrar sesión:', error);
+            
+            // Forzar cierre de sesión local en caso de error
+            localStorage.removeItem('token');
+            user.set(null);
+            navigate('/login');
         }
     }
 </script>
@@ -109,13 +381,16 @@
             <div class="user-info">
                 <h3>{$user ? $user.name : 'Usuario'}</h3>
                 <div class="action-buttons">
-                    <button class="btn-icon" on:click={openFriendRequestsModal}>
+                    <button class="btn-icon" on:click={openFriendRequestsModal} title="Solicitudes de amistad">
                         <span class="icon">👥</span>
+                        {#if friendRequests.received.length > 0}
+                            <span class="badge">{friendRequests.received.length}</span>
+                        {/if}
                     </button>
-                    <button class="btn-icon" on:click={openAddFriendModal}>
+                    <button class="btn-icon" on:click={openAddFriendModal} title="Añadir amigo">
                         <span class="icon">➕</span>
                     </button>
-                    <button class="btn-icon" on:click={handleLogout}>
+                    <button class="btn-icon" on:click={handleLogout} title="Cerrar sesión">
                         <span class="icon">🚪</span>
                     </button>
                 </div>
@@ -130,7 +405,13 @@
                 <div class="contact-list">
                     {#if contacts && contacts.length > 0}
                         {#each contacts as contact}
-                            <div class="contact-item">
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <!-- svelte-ignore a11y-no-static-element-interactions -->
+                            <div 
+                                class="contact-item" 
+                                class:active={selectedChat && !selectedChat.isGroup && selectedChat.id === contact.id}
+                                on:click={() => selectChat(contact, false)}
+                            >
                                 <span class="contact-name">{contact.name}</span>
                                 <span class="status-dot" class:online={contact.status === 'online'}></span>
                             </div>
@@ -150,7 +431,13 @@
                 <div class="group-list">
                     {#if groups && groups.length > 0}
                         {#each groups as group}
-                            <div class="group-item">
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <!-- svelte-ignore a11y-no-static-element-interactions -->
+                            <div 
+                                class="group-item"
+                                class:active={selectedChat && selectedChat.isGroup && selectedChat.id === group.id}
+                                on:click={() => selectChat(group, true)}
+                            >
                                 <span class="group-name">{group.name}</span>
                             </div>
                         {/each}
@@ -163,9 +450,43 @@
         
         <!-- Área de chat -->
         <div class="chat-area">
-            <div class="empty-chat">
-                <p>Selecciona un chat para comenzar a conversar</p>
-            </div>
+            {#if selectedChat}
+                <div class="chat-header">
+                    <h3>{selectedChat.name}</h3>
+                    {#if !selectedChat.isGroup && selectedChat.status}
+                        <span class="status-indicator" class:online={selectedChat.status === 'online'}>
+                            {selectedChat.status === 'online' ? 'en línea' : 'desconectado'}
+                        </span>
+                    {/if}
+                </div>
+                
+                <div class="messages-container">
+                    {#if messages.length > 0}
+                        {#each messages as message}
+                            <div class="message-item" class:sent={message.sender_id === $user.id} class:received={message.sender_id !== $user.id}>
+                                <div class="message-content">{message.content}</div>
+                                <div class="message-time">{new Date(message.created_at).toLocaleTimeString()}</div>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="empty-messages">No hay mensajes aún. ¡Sé el primero en escribir!</div>
+                    {/if}
+                </div>
+                
+                <div class="message-input-container">
+                    <input 
+                        type="text" 
+                        placeholder="Escribe un mensaje..." 
+                        bind:value={newMessage}
+                        on:keypress={(e) => e.key === 'Enter' && sendMessage()}
+                    />
+                    <button class="send-btn" on:click={sendMessage}>Enviar</button>
+                </div>
+            {:else}
+                <div class="empty-chat">
+                    <p>Selecciona un chat para comenzar a conversar</p>
+                </div>
+            {/if}
         </div>
         
         <!-- Modales -->
@@ -178,11 +499,38 @@
                     </div>
                     <div class="modal-body">
                         <p>Ingresa el correo electrónico del amigo que deseas añadir</p>
-                        <input type="email" placeholder="correo@ejemplo.com" class="input-field" />
+                        
+                        {#if addFriendError}
+                            <div class="alert alert-danger">{addFriendError}</div>
+                        {/if}
+                        
+                        {#if addFriendSuccess}
+                            <div class="alert alert-success">{addFriendSuccess}</div>
+                        {/if}
+                        
+                        <input 
+                            type="email" 
+                            placeholder="correo@ejemplo.com" 
+                            class="input-field"
+                            bind:value={friendEmail} 
+                            disabled={isSubmitting}
+                        />
                     </div>
                     <div class="modal-footer">
-                        <button class="btn">Enviar Solicitud</button>
-                        <button class="btn btn-cancel" on:click={closeAddFriendModal}>Cancelar</button>
+                        <button 
+                            class="btn" 
+                            on:click={sendFriendRequest} 
+                            disabled={isSubmitting || !friendEmail}
+                        >
+                            {isSubmitting ? 'Enviando...' : 'Enviar Solicitud'}
+                        </button>
+                        <button 
+                            class="btn btn-cancel" 
+                            on:click={closeAddFriendModal}
+                            disabled={isSubmitting}
+                        >
+                            Cancelar
+                        </button>
                     </div>
                 </div>
             </div>
@@ -196,7 +544,36 @@
                         <button class="close-btn" on:click={closeFriendRequestsModal}>×</button>
                     </div>
                     <div class="modal-body">
-                        <div class="empty-list">No tienes solicitudes pendientes</div>
+                        <h4>Solicitudes recibidas</h4>
+                        {#if friendRequests.received && friendRequests.received.length > 0}
+                            <div class="requests-list">
+                                {#each friendRequests.received as request}
+                                    <div class="request-item">
+                                        <span class="request-name">{request.user.name}</span>
+                                        <div class="request-actions">
+                                            <button class="btn btn-sm btn-accept" on:click={() => acceptFriendRequest(request.user.id)}>Aceptar</button>
+                                            <button class="btn btn-sm btn-reject" on:click={() => rejectFriendRequest(request.user.id)}>Rechazar</button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else}
+                            <div class="empty-list">No tienes solicitudes pendientes</div>
+                        {/if}
+                        
+                        <h4>Solicitudes enviadas</h4>
+                        {#if friendRequests.sent && friendRequests.sent.length > 0}
+                            <div class="requests-list">
+                                {#each friendRequests.sent as request}
+                                    <div class="request-item">
+                                        <span class="request-name">{request.friend.name}</span>
+                                        <span class="request-status">Pendiente</span>
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else}
+                            <div class="empty-list">No tienes solicitudes enviadas</div>
+                        {/if}
                     </div>
                 </div>
             </div>
@@ -211,14 +588,28 @@
                     </div>
                     <div class="modal-body">
                         <p>Ingresa el nombre del grupo</p>
-                        <input type="text" placeholder="Nombre del grupo" class="input-field" />
+                        
+                        {#if createGroupError}
+                            <div class="alert alert-danger">{createGroupError}</div>
+                        {/if}
+                        
+                        <input 
+                            type="text" 
+                            placeholder="Nombre del grupo" 
+                            class="input-field"
+                            bind:value={groupName}
+                        />
+                        
                         <p>Selecciona los miembros</p>
                         <div class="members-list">
                             {#if contacts && contacts.length > 0}
                                 {#each contacts as contact}
                                     <div class="member-item">
                                         <label>
-                                            <input type="checkbox" />
+                                            <input 
+                                                type="checkbox" 
+                                                bind:checked={selectedMembers[contact.id]} 
+                                            />
                                             {contact.name}
                                         </label>
                                     </div>
@@ -229,8 +620,16 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn">Crear Grupo</button>
-                        <button class="btn btn-cancel" on:click={closeCreateGroupModal}>Cancelar</button>
+                        <button 
+                            class="btn" 
+                            on:click={createGroup}
+                            disabled={!groupName}
+                        >
+                            Crear Grupo
+                        </button>
+                        <button class="btn btn-cancel" on:click={closeCreateGroupModal}>
+                            Cancelar
+                        </button>
                     </div>
                 </div>
             </div>
